@@ -24,7 +24,9 @@ package com.markhwood.jndi.EphemeralContext;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.HashMap;
 import java.util.Hashtable;
+import java.util.Map;
 import javax.naming.NamingException;
 import javax.naming.spi.InitialContextFactory;
 import javax.xml.XMLConstants;
@@ -50,6 +52,16 @@ public class ContextFactory
 
     private static final Logger log = LoggerFactory.getLogger(ContextFactory.class);
 
+    private static final String URL_NONE = "__no_url_provided__";
+    private static final Map<String,Context> urlContextMap = new HashMap<String,Context>();
+
+    static final void reset()
+    {
+        urlContextMap.clear();
+    }
+
+
+
     /**
      * Create an EphemeralContext holding the given environment.
      *
@@ -60,43 +72,61 @@ public class ContextFactory
     public javax.naming.Context getInitialContext(Hashtable<?, ?> environment)
             throws NamingException
     {
-        Context initialContext = new Context(environment, null, null);
+        Context initialContext = null;
+        String contentPath = null;
 
-        String contentPath = (String) initialContext.getEnvironment().get(
-                Context.PROVIDER_URL);
+        if ( environment!=null )
+        {
+            contentPath = (String) environment.get( Context.PROVIDER_URL );
+        }
+
         if (null == contentPath)
         {
             log.debug("PROVIDER_URL not specified -- no initial content loaded");
+
+            initialContext = urlContextMap.get( URL_NONE );
+            if ( null==initialContext )
+            {
+                initialContext = new Context( environment, null, null );
+                urlContextMap.put( contentPath, initialContext );
+            }
         }
         else
         {
-            // Load content
-            SAXParserFactory parserFactory = SAXParserFactory.newInstance();
-            SchemaFactory schemaFactory = SchemaFactory.newInstance(
-                    XMLConstants.W3C_XML_SCHEMA_NS_URI);
-            InputStream content;
-            try {
-                URL contentResource = getClass().getResource(contentPath);
-                log.info("Loading initial content from {}", contentResource);
-                content = contentResource.openStream();
-            } catch (IOException ex) {
-                log.error("Could not open initial content:", ex);
-                throw new NamingException("Could not open initial content");
-            }
+            initialContext = urlContextMap.get( contentPath );
+            if ( null==initialContext )
+            {
+                initialContext = new Context( environment, null, null );
+                urlContextMap.put( contentPath, initialContext );
 
-            try {
-                Schema mySchema = schemaFactory.newSchema(getClass().getResource(
-                        INITIAL_CONTENT_SCHEMA));
-                parserFactory.setSchema(mySchema);
-                SAXParser parser = parserFactory.newSAXParser();
-                DefaultHandler saxHandler = new InitialContentHandler(initialContext);
-                parser.parse(content, saxHandler);
-            } catch (IOException ex) {
-                log.error("Could not parse initial content:  ", ex);
-            } catch (ParserConfigurationException ex) {
-                log.error("parsing initial content:", ex);
-            } catch (SAXException ex) {
-                log.error("parsing initial content:", ex);
+                // Load content
+                SAXParserFactory parserFactory = SAXParserFactory.newInstance();
+                SchemaFactory schemaFactory = SchemaFactory.newInstance(
+                        XMLConstants.W3C_XML_SCHEMA_NS_URI);
+                InputStream content;
+                try {
+                    URL contentResource = getClass().getResource(contentPath);
+                    log.info("Loading initial content from {}", contentResource);
+                    content = contentResource.openStream();
+                } catch (IOException ex) {
+                    log.error("Could not open initial content:", ex);
+                    throw new NamingException("Could not open initial content");
+                }
+
+                try {
+                    Schema mySchema = schemaFactory.newSchema(getClass().getResource(
+                            INITIAL_CONTENT_SCHEMA));
+                    parserFactory.setSchema(mySchema);
+                    SAXParser parser = parserFactory.newSAXParser();
+                    DefaultHandler saxHandler = new InitialContentHandler(initialContext);
+                    parser.parse(content, saxHandler);
+                } catch (IOException ex) {
+                    log.error("Could not parse initial content:  ", ex);
+                } catch (ParserConfigurationException ex) {
+                    log.error("parsing initial content:", ex);
+                } catch (SAXException ex) {
+                    log.error("parsing initial content:", ex);
+                }
             }
         }
 

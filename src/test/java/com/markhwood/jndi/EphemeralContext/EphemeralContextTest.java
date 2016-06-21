@@ -27,6 +27,8 @@ import javax.mail.Session;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.sql.DataSource;
+import org.apache.commons.dbcp.PoolingDataSource;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
@@ -43,6 +45,9 @@ public class EphemeralContextTest
     public void testPostgreSQLDataSource()
             throws NamingException
     {
+        // reset static context map for unit testing
+        ContextFactory.reset();
+
         // initial-context factory, URL supplied externally
         javax.naming.Context ic = new InitialContext(null);
 
@@ -75,6 +80,9 @@ public class EphemeralContextTest
     @Test
     public void testMail() throws NamingException
     {
+        // reset static context map for unit testing
+        ContextFactory.reset();
+
         // initial-context factory, URL supplied externally
         javax.naming.Context ic = new InitialContext(null);
 
@@ -86,6 +94,9 @@ public class EphemeralContextTest
     @Test
     public void testURL() throws NamingException
     {
+        // reset static context map for unit testing
+        ContextFactory.reset();
+
         // initial-context factory, URL supplied externally
         javax.naming.Context ic = new InitialContext(null);
 
@@ -101,11 +112,78 @@ public class EphemeralContextTest
     @Test
     public void testJMS() throws NamingException
     {
+        // reset static context map for unit testing
+        ContextFactory.reset();
+
         // initial-context factory, URL supplied externally
         javax.naming.Context ic = new InitialContext(null);
 
         // java:comp/env/jms/Example
         Object of = ic.lookup("java:comp/env/jms/Factory");
         assertTrue("Expecting a ConnectionFactory", of instanceof ConnectionFactory);
+    }
+
+    @Test
+    public void testReset() throws NamingException
+    {
+        // reset static context map for unit testing
+        ContextFactory.reset();
+
+        javax.naming.Context ic1 = new InitialContext();
+        assertNotNull( ic1 );
+
+        String dsName = "java:comp/env/jdbc/TestDS";
+
+        javax.naming.Context jc = (Context) ic1.lookup("java:comp");
+        javax.naming.Context ec = (Context) jc.lookup("env");
+        javax.naming.Context dc = (Context) ec.lookup("jdbc");
+
+        dc.bind( "TestDS", new PoolingDataSource() );
+        DataSource tds1 = (DataSource) ic1.lookup( dsName );
+        assertNotNull( tds1 );
+
+//        ic1.close();
+        ic1 = null;
+
+        ContextFactory.reset();
+        javax.naming.Context ic2 = new InitialContext();
+        DataSource tds2 = null;
+        try
+        {
+            tds2 = (DataSource) ic2.lookup( dsName );            
+        }
+        catch( NamingException ne )
+        {
+            tds2 = null;
+        }
+
+        assertNull( tds2 );
+    }
+
+    @Test
+    public void testSurvivability() throws NamingException
+    {
+        // reset static context map for unit testing
+        ContextFactory.reset();
+
+        javax.naming.Context ic1 = new InitialContext();
+        assertNotNull( ic1 );
+
+        String dsName = "java:comp/env/jdbc/TestDS";
+
+        javax.naming.Context jc = (Context) ic1.lookup("java:comp");
+        javax.naming.Context ec = (Context) jc.lookup("env");
+        javax.naming.Context dc = (Context) ec.lookup("jdbc");
+
+        dc.bind( "TestDS", new PoolingDataSource() );
+        DataSource tds1 = (DataSource) ic1.lookup( dsName );
+        assertNotNull( tds1 );
+
+//        ic1.close();
+        ic1 = null;
+
+        javax.naming.Context ic2 = new InitialContext();
+        DataSource tds2 = (DataSource) ic2.lookup( dsName );
+        assertNotNull( tds2 );
     }
 }
